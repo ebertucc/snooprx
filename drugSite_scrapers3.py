@@ -3,6 +3,9 @@ import requests
 import re
 import pickle
 from collections import defaultdict
+from cleaning_refs import med_dur_conversion as med_dur_conversion
+import pandas as pd
+
 
 
 
@@ -36,7 +39,28 @@ class drug:
         self.score = 0     
         self.num_rev = 0 #{'ddc': '', 'wmd': ''}
         self.num_rev_pages = 0
-
+        self.attributes = []
+        self.attributeDetails = {}
+        self.df = ''
+        
+    def get_revAttrDetails(self):
+        attributes = list(self.reviews[0].__dict__.keys())
+        attributes.remove('comment')
+        attributes.remove('medDuration')
+        attributes.remove('ageRange')
+        attr_opts = {}
+        for attr in attributes: 
+            full_list = [self.reviews[ik].__dict__[attr] for ik in range(len(self.reviews))]
+            attr_opts[attr] = set(full_list)
+        self.attributes = attributes
+        self.attributeDetails = attr_opts
+    
+    def build_df(self):
+        list_d = [self.reviews[ik].__dict__ for ik in range(len(self.reviews))]
+        self.df = pd.DataFrame(list_d)
+        
+    def slice_data(self, attribute, slice_label):
+        return self.df[self.df[attribute] == slice_label]
 
         
 # for a particular drug
@@ -48,21 +72,19 @@ class review(drug):
             reviewer_info = site.set_reviewerMeta(_review_soup, ik)
             self.drugName = drug.name
             self.site = site.name
-            self.condition = site.set_condition(_review_soup)
+            self.condition = site.set_condition(reviewer_info)# changed, unsure of effects on wmd
             self.reviewDate = site.set_reviewDate(_review_soup)
             self.userName = site.set_userName(reviewer_info) #temp.split(',')[0]
-            self.ageRange = site.set_ageRange(reviewer_info) #re.search('\s\w+[-]\w+\s', temp).group().strip()
+            self.ageRange_str, self.ageRange = site.set_ageRange(reviewer_info) #re.search('\s\w+[-]\w+\s', temp).group().strip()
             self.gender = site.set_gender(reviewer_info) #re.split('\s\w+[-]\w+\s', temp)[1].split()[0]
             self.role = site.set_role(_review_soup)
-            self.medDuration = site.set_medDuration(reviewer_info) #re.split('on Treatment for ', temp)[1].split('(Patient)')[0].strip()
+            self.medDuration_str, self.medDuration = site.set_medDuration(reviewer_info) #re.split('on Treatment for ', temp)[1].split('(Patient)')[0].strip()
             self.effectiveness = site.set_effectiveness(_review_soup)
             self.ease_of_use = site.set_ease_of_use(_review_soup)
             self.satisfaction = site.set_satisfaction(_review_soup)
             self.genRating = site.set_genRating(_review_soup)
             self.comment = site.set_comment(_review_soup, ik)
             self.upVotes = site.set_upVotes(_review_soup)
-
-
 
 
             
@@ -99,7 +121,7 @@ class DrugsDotCom:
             pop_soup = _drug_summary.find('td', {'class': 'condition-table__popularity'})
             popularity = str(pop_soup.find('div', {'class': 'meter'})).split('width:')[1].split('%')[0]
             _new_drug.url_drug_revs= 'https://www.drugs.com'+ str(_drug_summary.find('td', {'class': 'condition-table__reviews'})).split('href="')[1].split('"')[0]
-            _new_drug.site_abbrev = self.abbrev
+            _new_drug.site_abbrev = site#self.abbrev
             return _new_drug
             
         def get_drug_metadata(self, condition, pg_init, pg_n):
@@ -155,15 +177,16 @@ class DrugsDotCom:
         # fetch information about author;
         # bug fix: added a tag to the tags list.  There may be more lurking...
         def set_reviewerMeta (self, _rev_soup, ik):
-            tags = ['user-name user-type user-type-2_non_member', 'user-name user-type user-type-1_standard_member','user-name user-type user-type-0_select_member']
-            if _rev_soup.find('p', {'class': tags[0]}):
-                return _rev_soup.find('p', {'class': tags[0]})
-            elif _rev_soup.find('p', {'class': tags[1]}):
-                return _rev_soup.find('p', {'class': tags[1]})
-            elif _rev_soup.find('p', {'class': tags[2]}):
-                return _rev_soup.find('p', {'class': tags[2]})
-            else:
-                return None
+            return _rev_soup.find('div', {'class': 'user-comment'})
+#             tags = ['user-name user-type user-type-2_non_member', 'user-name user-type user-type-1_standard_member','user-name user-type user-type-0_select_member']
+#             if _rev_soup.find('p', {'class': tags[0]}):
+#                 return _rev_soup.find('p', {'class': tags[0]})
+#             elif _rev_soup.find('p', {'class': tags[1]}):
+#                 return _rev_soup.find('p', {'class': tags[1]})
+#             elif _rev_soup.find('p', {'class': tags[2]}):
+#                 return _rev_soup.find('p', {'class': tags[2]})
+#             else:
+#                 return None
             
         def set_userName (self, _reviewerMeta):
                 try:
@@ -175,9 +198,11 @@ class DrugsDotCom:
         #need to fix this        
         def set_ageRange (self, _reviewerMeta):
                 try:
-                    return re.search('\s\w+[-]\w+\s', _reviewerMeta).group().strip()
+                    temp_ar = re.search('\s\w+[-]\w+\s', _reviewerMeta).group().strip()
+                    temp_ar = temp_ar.split('-')
+                    return str([int(temp_ar[0]), int(temp_ar[1])]), [int(temp_ar[0]), int(temp_ar[1])]
                 except:
-                    return None
+                    return None, None
                     
                     
         #gender not specified on drugs.com
@@ -190,11 +215,15 @@ class DrugsDotCom:
             
         def set_medDuration (self, _reviewerMeta):
                 try: 
-                    dates =_reviewerMeta.find_all('span')#, {'class':'small light'})
-                    if len(dates)>1:
-                        return str(dates[0]).split('<span class="tiny light">(taken for')[1].split(')</span>')[0].strip()
+#                     dates =_reviewerMeta.find_all('span')#, {'class':'small light'})
+                    dates =  _reviewerMeta.find('span', {'class': 'tiny light'}).get_text()
+                    dur = ((dates.split('taken for ')[1]).split(')')[0]).strip()
+                    try:
+                        return str(med_dur_conversion[dur]), med_dur_conversion[dur]
+                    except:
+                        return None, None
                 except:
-                    return None
+                    return None, None
 
                 
         def set_reviewDate (self, _reviewerMeta):
@@ -208,9 +237,9 @@ class DrugsDotCom:
                     return None
                 
                 
-        def set_condition (self, _rev_soup):
+        def set_condition (self, _reviewerMeta):
                 try:
-                    return _rev_soup.find('div', {'class':'user-comment'}).b.get_text()
+                    return 'depression'#condition# _rev_soup.find('div', {'class':'user-comment'}).b.get_text()
                 except:
                     return None
                 
@@ -254,6 +283,7 @@ class DrugsDotCom:
                 
                 
 # ************ webMD.com ************ Parser
+
 
 class WebMD:
     
@@ -307,7 +337,7 @@ class WebMD:
 
         def get_revs_url_list(self, _new_drug):
             cond_soup = load_soup(_new_drug.url_drug_revs)
-            print(_new_drug.url_drug_revs)
+#             print(_new_drug.url_drug_revs)
             cond_codes_pgs= []
             options = (cond_soup.find('select', {'id':'conditionFilter'})).find_all('option')
             for option in options:
@@ -346,9 +376,11 @@ class WebMD:
 
         def set_ageRange (self, _reviewerMeta):
             try:
-                return re.search('\s\w+[-]\w+\s', _reviewerMeta).group().strip()
+                temp_ar = re.search('\s\w+[-]\w+\s', _reviewerMeta).group().strip()
+                temp_ar = temp_ar.split('-')
+                return str([int(temp_ar[0]), int(temp_ar[1])]), [int(temp_ar[0]), int(temp_ar[1])]
             except:
-                return None
+                return None, None
 
         def set_gender (self, _reviewerMeta):
             try: 
@@ -366,9 +398,13 @@ class WebMD:
             
         def set_medDuration (self, _reviewerMeta):
             try:
-                return re.split('on Treatment for ', _reviewerMeta)[1].split('(Patient)')[0].strip()
+                dur = re.split('on Treatment for ', _reviewerMeta)[1].split('(Patient)')[0].strip()
+                try:
+                    return str(med_dur_conversion[dur]), med_dur_conversion[dur]
+                except:
+                    return None, None #this might be a bad idea
             except:
-                return None
+                return None, None
             
         #below takes full soup
         #untested for webMD
@@ -390,7 +426,7 @@ class WebMD:
         def set_effectiveness (self, _rev_soup):
                 try:
                     temp = _rev_soup.find('div' ,{'class' : 'catRatings firstEl clearfix'}).text
-                    return float(re.search(r'\d+', temp).group())
+                    return float(re.search(r'\d+', temp).group()) #switch to float
                 except:
                     return None
 
@@ -454,13 +490,14 @@ def build_depression_drugs(site, pickleopt, picklename, load_or_scrape='load'):
         generics_list = [new_drug.generic.strip(' systemic') for new_drug in all_drugs_list]
         print('number of generics:', len(generics_list))
 
-        for new_drug in all_drugs_list:
+        for new_drug in all_drugs_list[:1]:
             if (new_drug.name in generics_list) or (new_drug.num_rev>=200):
                 print(new_drug.name)
                 drug_list.append(new_drug)
                 new_drug, revs_url_list = parser.get_revs_url_list(new_drug)
                 for ik, url in enumerate(revs_url_list):
                     new_drug = scrape_parse_reviews(url, new_drug, parser, tag)
+                    new_drug.get_revAttrDetails()
                     drug_list[-1] = new_drug
                     pickle.dump( drug_list, open( picklename+'.p', "wb" ) )
                     print('scraped pages:', time.time()- start, new_drug.name, 'pages:', ik)
@@ -480,4 +517,3 @@ def build_depression_drugs(site, pickleopt, picklename, load_or_scrape='load'):
         filled_drug_list, all_drugs_list, generics_list = doItAll(WMD_parser,1, tag)
         
     return filled_drug_list, all_drugs_list, generics_list
-        
