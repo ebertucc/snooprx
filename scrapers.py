@@ -15,10 +15,9 @@ def load_soup(url):
     soup = bf(html, 'html5lib')
     return soup
 
-# takes url list, scrapes, returns pages of soup
+# takes url list, scrapes, returns pages of soup for a particular drug
 def scrape_parse_reviews(url, drug, parser, tag):
     page = load_soup(url)
-    print(len(page))
     rev_stew = page.find_all('div' ,{'class' : tag})
     for ik, item in enumerate(rev_stew):
         new_review = review(drug, item, parser, ik)
@@ -86,7 +85,7 @@ class DrugsDotCom:
 
         def get_revs_url_list(self, _new_drug):
             cond_soup = load_soup(_new_drug.url_drug_revs)
-            mega = str(((cond_soup.find('div', {'id': 'contentWrap'})).find('div', {'class': 'contentBox'})))#.find('div', {'class':'responsive-table-wrap-mobile'})
+            mega = str(((cond_soup.find('div', {'id': 'contentWrap'})).find('div', {'class': 'contentBox'})))
             options = mega.split('gotoArr[')[2:-1]
             options = [(str(option).split("= '")[1]).split("';\n")[0] for option in options]
             numbers_soup = ((cond_soup.find('div', {'id': 'contentWrap'})).find('div', {'class': 'contentBox'})).find('div', {'class':'data-list-filter'}).find_all('option')[1:]
@@ -108,18 +107,9 @@ class DrugsDotCom:
         
         
         # fetch information about author;
-        # bug fix: added a tag to the tags list.  There may be more lurking...
         def set_reviewerMeta (self, _rev_soup, ik):
             return _rev_soup.find('div', {'class': 'user-comment'})
-#             tags = ['user-name user-type user-type-2_non_member', 'user-name user-type user-type-1_standard_member','user-name user-type user-type-0_select_member']
-#             if _rev_soup.find('p', {'class': tags[0]}):
-#                 return _rev_soup.find('p', {'class': tags[0]})
-#             elif _rev_soup.find('p', {'class': tags[1]}):
-#                 return _rev_soup.find('p', {'class': tags[1]})
-#             elif _rev_soup.find('p', {'class': tags[2]}):
-#                 return _rev_soup.find('p', {'class': tags[2]})
-#             else:
-#                 return None
+
             
         def set_userName (self, _reviewerMeta):
                 try:
@@ -148,7 +138,6 @@ class DrugsDotCom:
             
         def set_medDuration (self, _reviewerMeta):
                 try: 
-#                     dates =_reviewerMeta.find_all('span')#, {'class':'small light'})
                     dates =  _reviewerMeta.find('span', {'class': 'tiny light'}).get_text()
                     dur = ((dates.split('taken for ')[1]).split(')')[0]).strip()
                     try:
@@ -172,7 +161,7 @@ class DrugsDotCom:
                 
         def set_condition (self, _reviewerMeta):
                 try:
-                    return 'depression'#condition# _rev_soup.find('div', {'class':'user-comment'}).b.get_text()
+                    return 'depression'
                 except:
                     return None
                 
@@ -240,14 +229,13 @@ class WebMD:
             _new_drug.generic = str(name_soup.find('section', {'class':'generic-name'}).find('p')).split('</span>')[1].split('</p>')[0]
             _new_drug.num_rev = int((drug_data[3].get_text().split(' Reviews')[0]))
             _new_drug.num_rev_pages = _new_drug.num_rev//5 + 1
-            _new_drug.url_drug_revs=  'http://www.webmd.com'+str(drug_data[3]).split('a href="')[1].split('">')[0]#.split('href="')[1].split('"')[0]
-#             print(_new_drug.url_drug_revs[site])
+            _new_drug.url_drug_revs=  'http://www.webmd.com'+str(drug_data[3]).split('a href="')[1].split('">')[0]
             _new_drug.site_abbrev = self.abbrev
             return _new_drug
             
         def get_drug_metadata(self, condition, pg_init, pg_n):
             # all drugs for a condition
-            #call function to build list of all drugs used to treat depression
+            # call function to build list of all drugs used to treat depression
             abbrev = self.abbrev
             drugslist_list = self.Drugslist_url_list(condition, pg_init, pg_n)
             # initialize lists for two kinds of soup needed to fill drug metadata fields for ddc
@@ -265,12 +253,10 @@ class WebMD:
                 new_drug = drug()
                 drug_meta = self.process_drug(druglistsummary_soups[ik], abbrev, new_drug)
                 _drug_list_ds.append(drug_meta)
-#                 print(drug_meta.__dict__)
             return _drug_list_ds
 
         def get_revs_url_list(self, _new_drug):
             cond_soup = load_soup(_new_drug.url_drug_revs)
-#             print(_new_drug.url_drug_revs)
             cond_codes_pgs= []
             options = (cond_soup.find('select', {'id':'conditionFilter'})).find_all('option')
             for option in options:
@@ -281,10 +267,7 @@ class WebMD:
             for cond_pg in cond_codes_pgs:
                 cond = cond_pg[0]
                 pg_n = int(cond_pg[1])//5
-#     url_list = [url_c[0] + drug_stem + url_c[1] +str(ik) + url_c[2] for ik in range(pg_init, pg_n+1)]
                 revs_urls = revs_urls+ [ _new_drug.url_drug_revs+ '&pageIndex=' +str(ik) + '&sortby=3'+'&conditionFilter='+str(cond) for ik in range(0, pg_n+1)]
-#                 url_list = [ _new_drug.url_drug_revs[site]+ url_c[1] +str(ik) + url_c[2]+url_c[3] for ik in range(pg_init, pg_n+1)]
-#                 revs_urls = revs_urls+revs_url_list(new_drug, start_num, pg_n, WMD_parser.abbrev, cond)
                 total_revs +=int(cond_pg[1])
             _new_drug.num_rev = total_revs
             return _new_drug, revs_urls
@@ -296,7 +279,7 @@ class WebMD:
             except:
                 return None
             
-        #below takes reviewer soup
+
         def set_userName (self, _reviewerMeta):
             try:
                 splits = _reviewerMeta.split(',')
@@ -307,6 +290,7 @@ class WebMD:
             except:
                 return 'Anonymous'
 
+            
         def set_ageRange (self, _reviewerMeta):
             try:
                 temp_ar = re.search('\s\w+[-]\w+\s', _reviewerMeta).group().strip()
@@ -315,6 +299,7 @@ class WebMD:
             except:
                 return None, None
 
+            
         def set_gender (self, _reviewerMeta):
             try: 
                 gender = re.split('\s\w+[-]\w+\s', _reviewerMeta)[1].split()[0]
@@ -323,11 +308,13 @@ class WebMD:
             except: 
                 return None
         
+        
         def set_role(self, _rev_soup):
             try:
                 return _rev_soup.find('p', {'class':'reviewerInfo'}).text.strip('Reviewer: ').split(' ')[-1].replace('(','').replace(')','')
             except:
                 return None
+            
             
         def set_medDuration (self, _reviewerMeta):
             try:
@@ -335,12 +322,11 @@ class WebMD:
                 try:
                     return str(med_dur_conversion[dur]), med_dur_conversion[dur]
                 except:
-                    return None, None #this might be a bad idea
+                    return None, None
             except:
                 return None, None
             
-        #below takes full soup
-        #untested for webMD
+            
         def set_reviewDate  (self, _rev_soup):
             try:
                 return _rev_soup.find('div', {'class': 'date'}).text.split(' ',1)[0]
@@ -359,7 +345,7 @@ class WebMD:
         def set_effectiveness (self, _rev_soup):
                 try:
                     temp = _rev_soup.find('div' ,{'class' : 'catRatings firstEl clearfix'}).text
-                    return float(re.search(r'\d+', temp).group()) #switch to float
+                    return float(re.search(r'\d+', temp).group()) 
                 except:
                     return None
 
@@ -398,9 +384,9 @@ class WebMD:
 
 
 ############################
-#revised
+# revised
 # by default will try to load an existing pickle file for existing all_drug_list, and will scrape if load fails or if specified to do so
-def build_depression_drugs(site, pickleopt, picklename, load_or_scrape='load'):
+def build_depression_drugs(site, pickleopt, picklename, load_or_scrape='load', num_drugs = 1):
     # Set condition
     condition = 'depression'
     def doItAll(parser, start_num, tag):
@@ -410,10 +396,9 @@ def build_depression_drugs(site, pickleopt, picklename, load_or_scrape='load'):
                 all_drugs_list = pickle.load(open( 'all_drug_list_'+site+'.p', "rb" ) )
                 print('loaded list')
             except:
-                print("there isn't a pickle file to work with! I'm going to have to scrape!")
+                print("There isn't a pickle file of drug metadata availble to work with. Now scraping metadata.")
                 all_drugs_list = parser.get_drug_metadata('depression', 1, 1)
                 pickle.dump( all_drugs_list, open( 'all_drug_list_'+site+'.p', "wb" ) )
-                print('scraped list:', time.time()-start)
         elif load_or_scrape == 'scrape':
             all_drugs_list = parser.get_drug_metadata('depression', 1, 1)
             pickle.dump( all_drugs_list, open( 'all_drug_list_'+site+'.p', "wb" ) )
@@ -421,9 +406,8 @@ def build_depression_drugs(site, pickleopt, picklename, load_or_scrape='load'):
             
         drug_list = []
         generics_list = [new_drug.generic.strip(' systemic') for new_drug in all_drugs_list]
-        print('number of generics:', len(generics_list))
 
-        for new_drug in all_drugs_list[:1]:
+        for new_drug in all_drugs_list[:num_drugs]:
             if (new_drug.name in generics_list) or (new_drug.num_rev>=200):
                 print(new_drug.name)
                 drug_list.append(new_drug)
@@ -433,8 +417,6 @@ def build_depression_drugs(site, pickleopt, picklename, load_or_scrape='load'):
                     new_drug.get_revAttrDetails()
                     drug_list[-1] = new_drug
                     pickle.dump( drug_list, open( picklename+'.p', "wb" ) )
-                    print('scraped pages:', time.time()- start, new_drug.name, 'pages:', ik)
-                print('scraped sites:', time.time()- start)
                 print('number of drugs on short list so far:', len(drug_list))
         return drug_list, all_drugs_list, generics_list
 
