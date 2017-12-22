@@ -1,6 +1,7 @@
 from bs4 import BeautifulSoup as bf
 import requests
 import re
+import time
 import pickle
 from collections import defaultdict
 from cleaning_refs import med_dur_conversion as med_dur_conversion
